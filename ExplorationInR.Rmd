@@ -9,22 +9,263 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+## Data Exploration
+```{r}
+cps <- read.csv("atuscps_2024.dat")
+act_sum <- read.csv("atussum_2024.dat")
+resp <- read.csv("atusresp_2024.dat")
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+colnames(cps)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+colnames(act_sum)
+```
+```{r}
+colnames(resp)
+```
+```{r}
+library(dplyr)
+
+# --- 1. Keep only essential columns ---
+act_small <- act_sum %>%
+  select(
+    TUCASEID,
+    TEAGE,
+    TESEX,
+    TELFS,
+    TESCHENR,
+    TESCHLVL,
+    starts_with("t")
+  )
+
+cps_small <- cps %>%
+  select(TUCASEID, PEEDUCA)
+
+# --- 2. Merge ---
+df <- act_small %>%
+  left_join(cps_small, by = "TUCASEID")
+
+# --- 3. Helper: sum ATUS activity columns by prefix ---
+sum_prefix <- function(data, prefix) {
+  cols <- grep(paste0("^", prefix), names(data), value = TRUE)
+  if (length(cols) == 0) return(rep(0, nrow(data)))
+  rowSums(data[, cols, drop = FALSE], na.rm = TRUE)
+}
+
+# --- 4. Create broad time-use categories (minutes per day) ---
+df <- df %>%
+  mutate(
+    sleep_min  = sum_prefix(., "t0101"),
+    work_min   = sum_prefix(., "t0501"),
+    educ_min   = sum_prefix(., "t0601") + sum_prefix(., "t0603") + sum_prefix(., "t0604"),
+    sports_min = sum_prefix(., "t1301"),
+    social_min = sum_prefix(., "t1201") + sum_prefix(., "t1202"),
+    tv_min     = sum_prefix(., "t120303"),
+    travel_min = sum_prefix(., "t18")
+  )
+
+# --- 5. Restrict age range if desired ---
+# You can change this to 20-24, 20-29, etc.
+df2 <- df %>%
+  filter(TEAGE >= 20, TEAGE <= 24)
+
+# --- 6. Create proxy groups ---
+# PEEDUCA cutpoint:
+# 43+ = bachelor's or higher in CPS education coding
+df2 <- df2 %>%
+  mutate(
+    ba_plus = PEEDUCA >= 43,
+
+    group = case_when(
+      TESCHENR == 1 & TESCHLVL == 2 & !ba_plus ~ "Undergrad",
+      TESCHENR == 1 & TESCHLVL == 2 &  ba_plus ~ "Graduate student proxy",
+      TESCHENR == 2 & TELFS %in% c(1, 2) & ba_plus ~ "Employed new-grad proxy",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(group))
+
+# --- 7. Keep only the variables needed for analysis ---
+analysis_df <- df2 %>%
+  select(
+    TUCASEID, group, TEAGE, TESEX,
+    sleep_min, work_min, educ_min, sports_min, social_min, tv_min, travel_min
+  )
+
+# --- 8. Compare average time use by group ---
+summary_table <- analysis_df %>%
+  group_by(group) %>%
+  summarise(
+    n = n(),
+    sleep_hrs   = mean(sleep_min, na.rm = TRUE) / 60,
+    work_hrs    = mean(work_min, na.rm = TRUE) / 60,
+    educ_hrs    = mean(educ_min, na.rm = TRUE) / 60,
+    sports_hrs  = mean(sports_min, na.rm = TRUE) / 60,
+    social_hrs  = mean(social_min, na.rm = TRUE) / 60,
+    tv_hrs      = mean(tv_min, na.rm = TRUE) / 60,
+    travel_hrs  = mean(travel_min, na.rm = TRUE) / 60
+  )
+
+print(summary_table)
+```
+
+```{r}
+library(tidyr)
+library(ggplot2)
+
+plot_df <- summary_table %>%
+  select(-n) %>%
+  pivot_longer(
+    cols = -group,
+    names_to = "category",
+    values_to = "hours"
+  )
+
+ggplot(plot_df, aes(x = category, y = hours, fill = group)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Average Time Use by Group in 2024",
+    x = "Time Category",
+    y = "Average Hours per Day",
+    fill = "Group"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+```{r}
+sex_counts <- analysis_df %>%
+  mutate(
+    sex = case_when(
+      TESEX == 1 ~ "Male",
+      TESEX == 2 ~ "Female",
+      TRUE ~ "Other/Unknown"
+    )
+  ) %>%
+  count(sex)
+
+ggplot(sex_counts, aes(x = sex, y = n, fill = sex)) +
+  geom_col() +
+  labs(
+    title = "Sex Distribution in Final Dataset",
+    x = "Sex",
+    y = "Number of Respondents"
+  ) +
+  theme_minimal()
+```
+```{r}
+group_counts <- analysis_df %>%
+  count(group)
+
+ggplot(group_counts, aes(x = group, y = n, fill = group)) +
+  geom_col() +
+  labs(
+    title = "Number of Respondents in Each Group",
+    x = "Group",
+    y = "Number of Respondents"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1)
+  )
+```
+
+
+```{r}
+df <- df %>%
+  mutate(
+    personal_care_min = sum_prefix(., "t01"),
+    household_min     = sum_prefix(., "t02"),
+    caring_hh_min     = sum_prefix(., "t03"),
+    caring_nonhh_min  = sum_prefix(., "t04"),
+    work_min          = sum_prefix(., "t05"),
+    education_min     = sum_prefix(., "t06"),
+    consumer_min      = sum_prefix(., "t07"),
+    services_min      = sum_prefix(., "t08") + sum_prefix(., "t09") + sum_prefix(., "t10"),
+    eating_min        = sum_prefix(., "t11"),
+    leisure_min       = sum_prefix(., "t12"),
+    sports_min        = sum_prefix(., "t13"),
+    religion_min      = sum_prefix(., "t14"),
+    volunteer_min     = sum_prefix(., "t15"),
+    phone_min         = sum_prefix(., "t16"),
+    travel_min        = sum_prefix(., "t18")
+  )
+
+# --- 5. Restrict age range if desired ---
+# You can change this to 20-24, 20-29, etc.
+df2 <- df %>%
+  filter(TEAGE >= 20, TEAGE <= 24)
+
+# --- 6. Create proxy groups ---
+# PEEDUCA cutpoint:
+# 43+ = bachelor's or higher in CPS education coding
+df2 <- df2 %>%
+  mutate(
+    ba_plus = PEEDUCA >= 43,
+
+    group = case_when(
+      TESCHENR == 1 & TESCHLVL == 2 & !ba_plus ~ "Undergrad",
+      TESCHENR == 1 & TESCHLVL == 2 &  ba_plus ~ "Graduate student proxy",
+      TESCHENR == 2 & TELFS %in% c(1, 2) & ba_plus ~ "Employed new-grad proxy",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(group))
+
+# --- 7. Keep only the variables needed for analysis ---
+analysis_df <- df2 %>%
+  select(
+    TUCASEID, group, TEAGE, TESEX,
+    sleep_min, work_min, educ_min, sports_min, social_min, tv_min, travel_min
+  )
+
+# --- 8. Compare average time use by group ---
+summary_table <- analysis_df %>%
+  group_by(group) %>%
+  summarise(
+    n = n(),
+    personal_care_hrs = mean(personal_care_min, na.rm = TRUE) / 60,
+    household_hrs     = mean(household_min, na.rm = TRUE) / 60,
+    caring_hh_hrs     = mean(caring_hh_min, na.rm = TRUE) / 60,
+    caring_nonhh_hrs  = mean(caring_nonhh_min, na.rm = TRUE) / 60,
+    work_hrs          = mean(work_min, na.rm = TRUE) / 60,
+    education_hrs     = mean(education_min, na.rm = TRUE) / 60,
+    consumer_hrs      = mean(consumer_min, na.rm = TRUE) / 60,
+    services_hrs      = mean(services_min, na.rm = TRUE) / 60,
+    eating_hrs        = mean(eating_min, na.rm = TRUE) / 60,
+    leisure_hrs       = mean(leisure_min, na.rm = TRUE) / 60,
+    sports_hrs        = mean(sports_min, na.rm = TRUE) / 60,
+    religion_hrs      = mean(religion_min, na.rm = TRUE) / 60,
+    volunteer_hrs     = mean(volunteer_min, na.rm = TRUE) / 60,
+    phone_hrs         = mean(phone_min, na.rm = TRUE) / 60,
+    travel_hrs        = mean(travel_min, na.rm = TRUE) / 60
+  )
+library(ggplot2)
+
+plot_df <- summary_table %>%
+  select(-n) %>%
+  pivot_longer(
+    cols = -group,
+    names_to = "category",
+    values_to = "hours"
+  )
+
+ggplot(plot_df, aes(x = category, y = hours, fill = group)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Average Time Use by Group in 2024",
+    x = "Time Category",
+    y = "Average Hours per Day",
+    fill = "Group"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
