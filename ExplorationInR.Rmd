@@ -11,9 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Data Exploration
 ```{r}
-cps <- read.csv("atuscps_2024.dat")
-act_sum <- read.csv("atussum_2024.dat")
-resp <- read.csv("atusresp_2024.dat")
+cps <- read.csv("data/atuscps_2024.dat")
+act_sum <- read.csv("data/atussum_2024.dat")
+resp <- read.csv("data/atusresp_2024.dat")
 ```
 
 ```{r}
