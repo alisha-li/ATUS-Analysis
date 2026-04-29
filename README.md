@@ -1,6 +1,6 @@
 # ATUS Time-Use Analysis
 
-Comparing daily time-use patterns across undergrads, graduate students, and employed new-grads using American Time Use Survey data. DS340H Spring 2026 Capstone.
+Comparing daily time-use patterns across undergrads, graduate students, and employed new-grads using American Time Use Survey data. DS340H Spring 2026 Capstone - led by Prof. Cassandra Pattanayak.
 
 ## Research Question
 
