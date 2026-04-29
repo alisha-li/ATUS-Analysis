@@ -6,9 +6,17 @@ Comparing daily time-use patterns across undergrads, graduate students, and empl
 
 What distinguishes the ways undergrads, graduate students, and new-grads spend their time?
 
+## Video Overview
+
+
+https://github.com/user-attachments/assets/6e7ec0bc-9e07-4f61-b922-a71e4ce30bd5
+
+
+
+
 ## Data
 
-[American Time Use Survey (ATUS)](https://www.bls.gov/tus/data.htm) public-use microdata, years 2015–2019 and 2023–2024. Ages 20–26. Final analysis sample N = 2,067 across three proxy groups:
+[American Time Use Survey (ATUS)](https://www.bls.gov/tus/data.htm) public-use microdata, years 2015–2019 and 2023–2024. Ages 19–26. Final analysis sample N = 2,067 across three proxy groups:
 
 - **Undergrad** (n=1,044): enrolled in college, no bachelor's yet
 - **Graduate** (n=220): enrolled in college, bachelor's or higher
